@@ -17,46 +17,19 @@ const components = {
 };
 
 export default ({ content }: Props) => {
-  return (
-    <MDXProvider components={components}>
-      <div>
-        HELLO
-        <div>{render(content)}</div>
-      </div>
-    </MDXProvider>
-  );
+  return <MDXProvider components={components}>{render(content)}</MDXProvider>;
 };
 
 function render(content) {
   return go(content);
 
-  function go({ type, children, ...node }) {
-    console.log({ type, children, ...node });
-    switch (type) {
-      case "root": {
-        return <>{children?.map(render)}</>;
-      }
-      case "element": {
-        return mdx(node.tagName, node.props, ...(children?.map(go) ?? []));
-      }
-      case "text": {
-        return node.value;
-      }
-      case "vdom": {
-        function go(node) {
-          if (typeof node === "string" || typeof node === "number") {
-            return <>{node}</>;
-          }
-
-          const { type, props, children } = node;
-          return mdx(type, props, ...(children?.map(go) ?? []));
-        }
-
-        return go(node.value);
-      }
+  function go(node) {
+    if (Array.isArray(node)) {
+      const [type, props, ...children] = node;
+      return mdx(type || React.Fragment, props, ...(children?.map(go) ?? []));
+    } else {
+      return node;
     }
-
-    return <>{type}</>;
   }
 }
 
@@ -75,16 +48,18 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     .use(function () {
       this.Compiler = function (tree) {
         function go({ type, position, children, ...node }) {
-          if (type === "element") {
-            return {
-              type: "element",
-              tagName: node.tagName,
-              props: node.properties,
-              ...(children && { children: children?.map(go) }),
-            };
+          // console.log(type, node);
+          if (type === "root") {
+            return [null, {}, ...(children?.map(go) ?? [])];
+          } else if (type === "element") {
+            return [
+              node.tagName,
+              node.properties,
+              ...(children?.map(go) ?? []),
+            ];
+          } else if (type === "text") {
+            return node.value;
           } else if (type === "jsx") {
-            const BabelPluginApplyMdxTypeProp = require("babel-plugin-apply-mdx-type-prop");
-
             const { ast } = transformSync(node.value, {
               configFile: false,
               babelrc: false,
@@ -92,10 +67,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
               presets: [
                 [require("@babel/preset-react"), { pragma: "createElement" }],
               ],
-              plugins: [
-                require("@babel/plugin-syntax-object-rest-spread"),
-                new BabelPluginApplyMdxTypeProp().plugin,
-              ],
+              plugins: [require("@babel/plugin-syntax-object-rest-spread")],
             });
 
             const code = generate(ast).code.replace(
@@ -107,7 +79,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
             const value = eval(`
 const React = require('react')\n
 
-function createElement(type, props, ...children) { return { type, props: props || {}, children }; }
+function createElement(type, props, ...children) { return [type, props || {}, ...children]; }
 
 ${code}`);
 
@@ -128,16 +100,10 @@ ${code}`);
               return JSON.stringify(element, replacer);
             }
 
-            return {
-              type: "vdom",
-              value: JSON.parse(serialize(value)),
-            };
+            return JSON.parse(serialize(value));
           } else {
-            return {
-              type,
-              ...node,
-              ...(children && { children: children?.map(go) }),
-            };
+            // console.log("UNKNOWN NODE", type, node);
+            throw new Error("UNKNOWN NODE");
           }
         }
 
@@ -146,7 +112,7 @@ ${code}`);
     });
 
   const jsx = await fn.process(await read("content/index.mdx"));
-  // console.log(jsx.result.children[1]);
+  // console.log(jsx.result);
 
   return {
     props: {
