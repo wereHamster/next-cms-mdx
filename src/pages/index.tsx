@@ -71,14 +71,12 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
             });
 
             const code = generate(ast).code.replace(
-              /createElement\(([A-Z][a-zA-Z0-9]*)/,
+              /createElement\(([A-Z][a-zA-Z0-9_]*)/,
               `createElement("$1"`
             );
             // console.log(code);
 
             const value = eval(`
-const React = require('react')\n
-
 function createElement(type, props, ...children) { return [type, props || {}, ...children]; }
 
 ${code}`);
