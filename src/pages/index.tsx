@@ -20,16 +20,12 @@ export default ({ content }: Props) => {
   return <MDXProvider components={components}>{render(content)}</MDXProvider>;
 };
 
-function render(content) {
-  return go(content);
-
-  function go(node) {
-    if (Array.isArray(node)) {
-      const [type, props, ...children] = node;
-      return mdx(type || React.Fragment, props, ...(children?.map(go) ?? []));
-    } else {
-      return node;
-    }
+function render(node) {
+  if (Array.isArray(node)) {
+    const [type, props, ...children] = node;
+    return mdx(type || React.Fragment, props, ...(children?.map(render) ?? []));
+  } else {
+    return node;
   }
 }
 
@@ -81,24 +77,7 @@ function createElement(type, props, ...children) { return [type, props || {}, ..
 
 ${code}`);
 
-            function serialize(element) {
-              const replacer = (key, value) => {
-                switch (key) {
-                  case "$$typeof":
-                  case "_owner":
-                  case "_store":
-                  case "ref":
-                  case "key":
-                    return;
-                  default:
-                    return value;
-                }
-              };
-
-              return JSON.stringify(element, replacer);
-            }
-
-            return JSON.parse(serialize(value));
+            return value;
           } else {
             // console.log("UNKNOWN NODE", type, node);
             throw new Error("UNKNOWN NODE");
